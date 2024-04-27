@@ -81,7 +81,7 @@ class GameState:
         """
         Returns: True if either agent has won the game
         """
-        return self.board.is_game_over() or self.max_moves_done
+        return self.board.is_game_over()
 
     def is_first_agent_win(self):
         """
@@ -212,6 +212,12 @@ def load_agent(agent_type, agent_learn, weights=None, depth=3):
         return KeyBoardAgent()
     elif agent_type == 'ab':
         return AlphaBetaAgent(depth=depth)
+    elif agent_type == 'ids':
+        return IterativeDeepeningAgent(depth=depth)
+    elif agent_type == 'mm':
+        return Min(depth=depth)
+    elif agent_type == 'mcs':
+        return MonteCarloSearchAgent()
     elif agent_type == 'ql':
         is_learning_agent = True if agent_learn else False
         return QLearningAgent(is_learning_agent=is_learning_agent, weights=weights)
@@ -446,9 +452,13 @@ def run_games(first_agent, second_agent, first_agent_turn, num_games, update_par
         # save weights
         # test using weights
         # change agent
+        a_wins = 0
+        b_wins = 0
+        draws = 0
+        avg_time = 0
 
-        print('starting game', 0)
         for i in range(num_games):
+            start_time = time.time()
 
             if (i+1) % NOTIFY_FREQ == 0:
                 print('Starting game', (i+1))
@@ -465,6 +475,15 @@ def run_games(first_agent, second_agent, first_agent_turn, num_games, update_par
 
             num_moves, game_state = game.run()
 
+            print(f"moves: {num_moves}")
+            
+            print(f"{first_agent.get_name() if game_state.is_first_agent_win() else second_agent.get_name()} won")
+            if game_state.is_first_agent_win():
+                a_wins += 1
+            elif game_state.is_second_agent_win():
+                b_wins += 1
+            else:
+                draws += 1            
             if first_agent.is_learning_agent:
                 reward = first_agent.episode_rewards
                 win = 1 if game_state.is_first_agent_win() else 0
@@ -535,6 +554,15 @@ def run_games(first_agent, second_agent, first_agent_turn, num_games, update_par
 
             if second_agent.has_been_learning_agent and update_param:
                 second_agent.update_parameters(update_param, (i+1))
+        
+            t = time.time() - start_time
+            print(f"time: {t}")
+            avg_time += t
+        
+        print("\n\n\n\n")
+        print(f"{first_agent.get_name()} vs {second_agent.get_name()}")
+        print(f"A: {a_wins} B: {b_wins} D: {draws}")
+        print(f"average time: {avg_time/num_games}")
 
 
     except Exception as e:
@@ -592,7 +620,5 @@ if __name__ == '__main__':
 
     # print(game_state.player_info())
 
-    start_time = time.time()
     args = read_command(sys.argv[1:])
     run_games(**args)
-    print(time.time() - start_time)

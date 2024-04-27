@@ -498,11 +498,13 @@ class Game:
                 print('Current turn is of agent: ' + str(game_state.player_symbol(game_state.player_info())))
                 print('Available moves: ' + str(game_state.get_legal_actions()))
                 # game_state.num_attacks()
-                input()
+                # input()
+
 
             if action is None:
                 action = active_agent.get_action(game_state)
-
+            print(action)
+            print(type(action))
             next_game_state = game_state.generate_successor(action)
             self.game_state = next_game_state
 

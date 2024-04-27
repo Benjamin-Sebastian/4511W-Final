@@ -7,6 +7,8 @@ from util import *
 import random
 from game import CHECKERS_FEATURE_COUNT, checkers_features, checkers_reward
 import numpy as np
+from collections import defaultdict
+
 
 class Agent(ABC):
 
@@ -21,7 +23,13 @@ class Agent(ABC):
         Returns: the single action to take in this state
         """
         pass
-
+    @abstractmethod
+    def get_name(self):
+        """
+        state: the state in which to take action
+        Returns: the single action to take in this state
+        """
+        pass
 
 class KeyBoardAgent(Agent):
 
@@ -48,13 +56,13 @@ class KeyBoardAgent(Agent):
         action = [start] + ends
         return action
 
-
 class AlphaBetaAgent(Agent):
 
     def __init__(self, depth):
         Agent.__init__(self, is_learning_agent=False)
         self.depth = depth
-
+    def get_name(self):
+         return "AlphaBetaAgent"
     def evaluation_function(self, state, agent=True):
         """
         state: the state to evaluate
@@ -145,6 +153,74 @@ class AlphaBetaAgent(Agent):
         output = mini_max(state, -1, 0, -float("inf"), float("inf"))
         return output[0]
 
+class IterativeDeepeningAgent(Agent):
+
+    def __init__(self, depth):
+        Agent.__init__(self, is_learning_agent=False)
+        self.depth = depth
+
+    def get_name(self):
+        return "IterativeDeepeningSearchAgent"
+
+    def evaluation_function(self, state, agent=True):
+        """
+        state: the state to evaluate
+        agent: True if the evaluation function is in favor of the first agent and False if
+               the evaluation function is in favor of the second agent
+
+        Returns: the value of evaluation
+        """
+        agent_ind = 0 if agent else 1
+        other_ind = 1 - agent_ind
+
+        if state.is_game_over():
+            if agent and state.is_first_agent_win():
+                return 500
+
+            if not agent and state.is_second_agent_win():
+                return 500
+
+            return -500
+
+        pieces_and_kings = state.get_pieces_and_kings()
+        return pieces_and_kings[agent_ind] + 2 * pieces_and_kings[agent_ind + 2] - \
+               (pieces_and_kings[other_ind] + 2 * pieces_and_kings[other_ind + 2])
+
+    def get_action(self, state):
+        max_agent = state.is_first_agent_turn()
+        best_action = None
+
+        for depth in range(1, self.depth + 1):
+            best_action = self.minimax(state, depth, max_agent)
+        return best_action
+
+    def minimax(self, state, depth, max_agent):
+        if depth == 0 or state.is_game_over():
+            return None, self.evaluation_function(state, max_agent)
+
+        actions = state.get_legal_actions()
+
+        if max_agent:
+            best_value = -float('inf')
+            best_action = None
+            for action in actions:
+                successor_state = state.generate_successor(action)
+                _, value = self.minimax(successor_state, depth - 1, False)
+                if value > best_value:
+                    best_value = value
+                    best_action = action
+            return best_action, best_value
+
+        else:
+            best_value = float('inf')
+            best_action = None
+            for action in actions:
+                successor_state = state.generate_successor(action)
+                _, value = self.minimax(successor_state, depth - 1, True)
+                if value < best_value:
+                    best_value = value
+                    best_action = action
+            return best_action, best_value
 
 class ReinforcementLearningAgent(Agent):
 
@@ -223,7 +299,6 @@ class ReinforcementLearningAgent(Agent):
         """
         self.prev_state = state
         self.prev_action = action
-
 
 class QLearningAgent(ReinforcementLearningAgent):
 
@@ -391,13 +466,13 @@ class QLearningAgent(ReinforcementLearningAgent):
             self.original_alpha /= 2.0
             self.original_epsilon /= 2.0
 
-
 class SarsaLearningAgent(QLearningAgent):
 
     def __init__(self, alpha=0.01, gamma=0.1, epsilon=0.5, is_learning_agent=True, weights=None):
         
         QLearningAgent.__init__(self, alpha, gamma, epsilon, is_learning_agent, weights)
-
+    def get_name(self):
+        return "SarsaLearningAgent"
 
     def update(self, state, action, next_state, next_action, reward):
 
@@ -440,7 +515,6 @@ class SarsaLearningAgent(QLearningAgent):
 
             return action
 
-
 class SarsaSoftmaxAgent(SarsaLearningAgent):
 
     def __init__(self, alpha=0.01, gamma=0.1, t=1.0, is_learning_agent=True, weights=None):
@@ -472,3 +546,63 @@ class SarsaSoftmaxAgent(SarsaLearningAgent):
     def update_parameters(self, freq, num_games):
         if num_games % freq == 0:
             self.t /= 2.0
+ 
+
+    def __init__(self, num_simulations=1000, exploration_weight=1.0, is_learning_agent=False):
+        Agent.__init__(self, is_learning_agent)
+        self.num_simulations = num_simulations
+        self.exploration_weight = exploration_weight
+        self.Q = defaultdict(int)  # (state, action) -> total reward
+        self.N = defaultdict(int)  # (state, action) -> visit count
+        self.max_episode_length = 1000  # Maximum length of an episode
+
+    def get_name(self):
+        return "MonteCarloSearchAgent"
+
+    def get_action(self, state):
+        legal_actions = state.get_legal_actions()
+        if not legal_actions:
+            return None
+
+        # Run simulations and update Q and N
+        for _ in range(self.num_simulations):
+            self.run_simulation(state)
+
+        # Choose the action with the highest value
+        action_values = [(self.Q[(state, action)] / self.N[(state, action)]) if self.N[(state, action)] > 0 else 0.0 for action in legal_actions]
+        max_value = max(action_values)
+        best_actions = [action for action, value in zip(legal_actions, action_values) if value == max_value]
+        action = random.choice(best_actions)
+
+        return action
+
+    def run_simulation(self, state):
+        state_copy = copy.deepcopy(state)
+        episode_length = 0
+        reward = 0.0
+
+        while not state_copy.is_game_over() and episode_length < self.max_episode_length:
+            legal_actions = state_copy.get_legal_actions()
+            action_values = [(self.Q[(state_copy, action)] / self.N[(state_copy, action)]) if self.N[(state_copy, action)] > 0 else 0.0 for action in legal_actions]
+            action_values = [value + (self.exploration_weight * random.random()) for value in action_values]
+            action = legal_actions[random.randint(0, len(legal_actions) - 1)]
+
+            next_state = state_copy.generate_successor(action)
+            reward += self.reward_function(state_copy, action, next_state)
+            state_copy = next_state
+            episode_length += 1
+
+        # Update Q and N
+        for state_action in [(state_copy, action) for action in state_copy.get_legal_actions()]:
+            self.N[state_action] += 1
+            self.Q[state_action] += reward
+
+    def reward_function(self, state, action, next_state):
+        # Implement your reward function here
+        # You can use features like the number of pieces, kings, etc.
+        # For example:
+        agent_ind = 0 if state.is_first_agent_turn() else 1
+        other_ind = 1 - agent_ind
+        pieces_and_kings = next_state.get_pieces_and_kings()
+        reward = pieces_and_kings[agent_ind] + 2 * pieces_and_kings[agent_ind + 2] - (pieces_and_kings[other_ind] + 2 * pieces_and_kings[other_ind + 2])
+        return reward

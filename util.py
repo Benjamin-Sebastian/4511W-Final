@@ -34,11 +34,11 @@ def load_weights(weights_file):
 
     file = Path(weights_file)
     if file.is_file():
-    	print(weights_file, 'File exists: use weights:(y)/n:')
-    	c = input()
-    	if c == "y" or c == '':
-    		weights = np.loadtxt(weights_file, delimiter=',', ndmin=2)
-    		if len(weights) != 0:
-	    		return weights[-1]
+     print(weights_file, 'File exists: use weights:(y)/n:')
+     c = input()
+     if c == "y" or c == '':
+      weights = np.loadtxt(weights_file, delimiter=',', ndmin=2)
+      if len(weights) != 0:
+       return weights[-1]
 
     return None

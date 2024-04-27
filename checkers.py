@@ -215,7 +215,7 @@ def load_agent(agent_type, agent_learn, weights=None, depth=3):
     elif agent_type == 'ids':
         return IterativeDeepeningAgent(depth=depth)
     elif agent_type == 'mm':
-        return Min(depth=depth)
+        return MiniMaxAgent(depth=depth)
     elif agent_type == 'mcs':
         return MonteCarloSearchAgent()
     elif agent_type == 'ql':

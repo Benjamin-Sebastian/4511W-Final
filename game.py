@@ -503,8 +503,6 @@ class Game:
 
             if action is None:
                 action = active_agent.get_action(game_state)
-            print(action)
-            print(type(action))
             next_game_state = game_state.generate_successor(action)
             self.game_state = next_game_state
 

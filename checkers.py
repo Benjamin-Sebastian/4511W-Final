@@ -188,7 +188,7 @@ class ClassicGameRules:
     The only control right now is whether to show game board at every step or not.
     """
 
-    def __init__(self, max_moves=200):
+    def __init__(self, max_moves=(500)):
         self.max_moves = max_moves
         self.quiet = False
 
@@ -201,23 +201,27 @@ class ClassicGameRules:
         return game
 
 
-def load_agent(agent_type, agent_learn, weights=None, depth=3):
+def load_agent(agent_type, agent_learn, weights=None, depth=2):
     """
     agent_type: type of agent, e.g. k, ab, rl
 
     Returns: instance of the respective agent
     """
 
-    if agent_type == 'k':
+    if agent_type == 'user':
         return KeyBoardAgent()
-    elif agent_type == 'ab':
+    elif agent_type == 'alphabeta':
         return AlphaBetaAgent(depth=depth)
     elif agent_type == 'ids':
-        return IterativeDeepeningAgent(depth=depth)
-    elif agent_type == 'mm':
+        return IterativeDeepeningAgent(max_depth=depth)
+    elif agent_type == 'idsa':
+        return IterativeDeepeningSearchAgent(max_depth=depth)
+    elif agent_type == 'minimax':
         return MiniMaxAgent(depth=depth)
-    elif agent_type == 'mcs':
-        return MonteCarloSearchAgent()
+    elif agent_type == 'first':
+        return FirstMoveAgent()
+    elif agent_type == 'rand':
+        return RandomAgent()
     elif agent_type == 'ql':
         is_learning_agent = True if agent_learn else False
         return QLearningAgent(is_learning_agent=is_learning_agent, weights=weights)
@@ -456,12 +460,15 @@ def run_games(first_agent, second_agent, first_agent_turn, num_games, update_par
         b_wins = 0
         draws = 0
         avg_time = 0
+        avg_a_time = 0
+        avg_b_time = 0
+        
+        
 
         for i in range(num_games):
+            print(f"{i+1}/{num_games}")
             start_time = time.time()
-
-            if (i+1) % NOTIFY_FREQ == 0:
-                print('Starting game', (i+1))
+            
 
             rules = ClassicGameRules()
 
@@ -473,96 +480,32 @@ def run_games(first_agent, second_agent, first_agent_turn, num_games, update_par
 
             game = rules.new_game(first_agent, second_agent, first_agent_turn, quiet=quiet)
 
-            num_moves, game_state = game.run()
+            num_moves, game_state, a_time, b_time = game.run()
+            avg_a_time+=a_time
+            avg_b_time+=b_time
 
-            print(f"moves: {num_moves}")
+            # print(f"moves: {num_moves}")
             
-            print(f"{first_agent.get_name() if game_state.is_first_agent_win() else second_agent.get_name()} won")
             if game_state.is_first_agent_win():
+                # print(f"{first_agent.get_name()} won")
                 a_wins += 1
             elif game_state.is_second_agent_win():
+                # print(f"{second_agent.get_name()} won")
                 b_wins += 1
             else:
-                draws += 1            
-            if first_agent.is_learning_agent:
-                reward = first_agent.episode_rewards
-                win = 1 if game_state.is_first_agent_win() else 0
-
-                init_state = GameState(the_player_turn=first_agent_turn)
-                max_q_value = first_agent.compute_value_from_q_values(init_state)
-
-                w_str = str(num_moves) + "," + str(win) + "," + str(reward) + "," + str(max_q_value) + "\n"
-                first_f_str += w_str
-
-                if (i+1) % WEIGHTS_SAVE_FREQ == 0:
-                    if len(first_w_deq) != 0 and len(first_w_deq) % NUM_WEIGHTS_REM == 0:
-                        first_w_deq.popleft()
-                    first_w_deq.append(np.array(first_agent.weights))
-
-                if (i+1) % WRITE_FREQ == 0:
-                    first_f.write(first_f_str)
-                    first_f_str = ""
-
-            if second_agent.is_learning_agent:
-                reward = second_agent.episode_rewards
-                win = 1 if game_state.is_second_agent_win() else 0
-
-                init_state = GameState(the_player_turn=first_agent_turn)
-                max_q_value = second_agent.compute_value_from_q_values(init_state)
-
-                w_str = str(num_moves) + "," + str(win) + "," + str(reward) + "," + str(max_q_value) + "\n"
-                second_f_str += w_str
-
-                if (i+1) % WEIGHTS_SAVE_FREQ == 0:
-                    if len(second_w_deq) != 0 and len(second_w_deq) % NUM_WEIGHTS_REM == 0:
-                        second_w_deq.popleft()
-                    second_w_deq.append(np.array(second_agent.weights))
-
-                if (i+1) % WRITE_FREQ == 0:
-                    second_f.write(second_f_str)
-                    second_f_str = ""
-
-            if (i+1) % TEST_FREQ == 0:
-                if first_agent.is_learning_agent:
-                    first_agent.stop_learning()
-
-                if second_agent.is_learning_agent:
-                    second_agent.stop_learning()
-
-                result_f = []
-                result_s = []
-                print('strting', TEST_GAMES, 'tests')
-
-                result_f, result_s = \
-                multiprocess(rules, first_agent, second_agent, first_agent_turn, quiet=True)
-
-                if first_agent.has_been_learning_agent:
-                    first_writer_res.writerow(result_f[0])
-                    first_writer_m_res.writerow(result_f[1])
-
-                if second_agent.has_been_learning_agent:
-                    second_writer_res.writerow(result_s[0])
-                    second_writer_m_res.writerow(result_s[1])
-
-            if first_agent.has_been_learning_agent and play_against_self:
-                if (i+1) % CHANGE_AGENT_FREQ == 0:
-                    weights = first_w_deq[-1]
-                    second_agent = QLearningAgent(weights=weights, is_learning_agent=False)
-
-            if first_agent.has_been_learning_agent and update_param:
-                first_agent.update_parameters(update_param, (i+1))
-
-            if second_agent.has_been_learning_agent and update_param:
-                second_agent.update_parameters(update_param, (i+1))
-        
+                # print("Draw")
+                draws += 1                 
             t = time.time() - start_time
-            print(f"time: {t}")
+            # print(f"time: {t}")
             avg_time += t
         
         print("\n\n\n\n")
+        a_states = first_agent.get_num_states()/num_games
+        b_states = second_agent.get_num_states()/num_games
         print(f"{first_agent.get_name()} vs {second_agent.get_name()}")
-        print(f"A: {a_wins} B: {b_wins} D: {draws}")
-        print(f"average time: {avg_time/num_games}")
+        print(f"A: {a_wins} ({100*a_wins/num_games}%) B: {b_wins} ({100*b_wins/num_games}%) D: {draws} ({100*draws/num_games}%)")
+        print(f"Average States Evaluated\nA: {a_states} B: {b_states}")
+        print(f"average time in ms:\nA:{1000*avg_a_time/num_games}\nB:{1000*avg_b_time/num_games}")
 
 
     except Exception as e:

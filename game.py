@@ -7,6 +7,7 @@ methods to run a single game.
 import math
 import copy
 from functools import reduce
+import time
 
 
 CHECKERS_FEATURE_COUNT = 8
@@ -483,6 +484,11 @@ class Game:
 
         action = None
         num_moves = 0
+        a_time = 0
+        b_time = 0
+        a_moves = 0
+        b_moves = 0
+        
         while not game_state.is_game_over() and num_moves < self.rules.max_moves:
             # get the agent whose turn is next
             # print('number of pieces', game_state.get_pieces_and_kings(True), game_state.get_pieces_and_kings(False))
@@ -502,7 +508,16 @@ class Game:
 
 
             if action is None:
+                start = time.time()
                 action = active_agent.get_action(game_state)
+                end = time.time()
+                if game_state.is_first_agent_turn():
+                    a_time += (end - start)
+                    a_moves+=1
+                else:
+                    b_time += (end - start)
+                    b_moves+=1
+
             next_game_state = game_state.generate_successor(action)
             self.game_state = next_game_state
 
@@ -524,4 +539,6 @@ class Game:
         # game_state.print_board()
         # print(num_moves)
 
-        return num_moves, game_state
+        a_time/=a_moves
+        b_time/=b_moves
+        return num_moves, game_state, a_time, b_time
